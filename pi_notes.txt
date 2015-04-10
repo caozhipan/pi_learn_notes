@@ -1,0 +1,8 @@
+1:设置cd卡
+sudo raspi-config
+
+2:更新apt包缓存
+sudo dpkg --clear-avail 
+sudo apt-get update
+
+3:
