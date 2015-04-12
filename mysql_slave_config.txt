@@ -1,0 +1,61 @@
+mysql主从同步#
+一：mysql数据库的主从
+mysql数据库5.5之后的版本和5.5以前的版本数据库主从存在差异，这里是针对数据库5.5之后的配置。 
+1.主库编辑my.cnf(linux的my.cnf在/etc/my.cnf路径下)：
+【mysqld】
+#注意下面的配置是要在配置文件的mysqld段进行配置，位置错了可能导致mysql无法启动。很多Mysql无法启动的时候一般都是My.cnf配置错误造成的 
+#名字随意取名，这个配置的意义是说打开Mysql的binary log功能，因为Mysql的数据库主从是从数据库读取主数据库的binary log来实现的。
+#当然这个参数不一定要在这里配置，也可以在mysql启动的时候，指定-log-bin参数来进行设定
+log-bin=NEW_NAME 
+server-id=1 #配一个唯一的ID编号，1至32。 
+#设置要进行或不要进行主从复制的数据库名，同时也要在从数据库上设定。
+binlog-do-db=数据库名1
+binlog-do-db=数据库名2
+binlog-ignore-db=数据库名1
+binlog-ignore-db=数据库名2
+#on *.*一定是*.*，不是指定数据库，不然sql错误，因为主从其实是在配置文件里指明哪些数据库需要同步，哪些数据库不需要同步
+#给从数据库机器建立一个能访问主数据库的用户(当然用户是建在主数据库上)
+mysql> grant replication slave on *.* to slaveuser@192.168.1.101 identified by '123456' ;
+#刷新权限
+mysql> flush privileges;
+#查看主库情况，出现下面结果说明配置成功
+mysql> show master status;
+------------------------------------------------------+
+File Position Binlog_Do_DB Binlog_Ignore_DB
+------------------------------------------------------+
+mysql-bin.000008 337 
+------------------------------------------------------+
+#在从数据库操作时候用得到文件名和位置，文件名是说读取主数据库的那个二进制文件来进行同步，从二进制文件的哪个位置开始
+记录下二进制日志文件名和位置
+2.从库编辑my.cnf，把server-id改成不和主机相同的数字。
+如果只想同步指定的数据库，可以添加 replicate-do-db = yourdatabase，
+同步几个就复制几个，把数据库名改了就好。
+【mysqld】
+server-id=2 #唯一
+#设置要进行或不要进行主从复制的数据库名，同时也要在Master 上设定。
+replicate-do-db=数据库名1
+replicate-do-db=数据库名2
+replicate-ignore-db=数据库名1
+replicate-ignore-db=数据库名2
+#这个mysql指令里有文件名和位置的指明
+mysql> change master to master_host='192.168.1.100',master_user='slaveuser',master_password='123456', master_log_file='mysql-bin.000008',master_log_pos=337;
+#开始同步线程
+mysql> start slave;
+#查看开启情况
+mysql> show slave status;
+如果出现：
+Slave_IO_Running: Yes
+Slave_SQL_Running: Yes
+表示主从同步进行中
+
+二：主数据库或者从数据库挂掉情况下的mysql主从同步
+1、当主数据库挂掉的时候，其实默认情况下从数据库会每60秒去访问主数据库进行同步，直到住数据库开启
+2、当从数据库挂掉，直接使用命令start slave开始同步功能即可
+
+三：mysql主从同步和操作系统无关，和mysql版本也基本无关。
+
+四：mysql主从同步的速度基本是秒同以内，但是当然还是存在时间的差异，所以从数据库基本只做查询用，
+在修改，实时性要求高，事物的操作单位内，不用从库，用主库的链接。
+
+五：相应系统在访问从数据库的时候，基本上只给它配置只能读数据库的用户，建议只读数据库用户的方式如下：
+GRANT SELECT ON yry360.* TO xxx@localhost IDENTIFIED BY "xxxx";
